@@ -18,5 +18,5 @@ policy "prohibited-providers-in-config" {
 
 policy "workspace-limit-resources" {
     source = "./terraform/workspace-limit-resources.sentinel"
-    enforcement_level = "advisory"
+    enforcement_level = "soft-mandatory"
 }
