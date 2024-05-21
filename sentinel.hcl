@@ -7,16 +7,16 @@ import "module" "tfconfig-functions" {
 }
 
 policy "prohibited-local-exec-commands" {
-    source = "./terraform/prohibited-local-exec-commands.sentinel"
+    source = "./prohibited-local-exec-commands.sentinel"
     enforcement_level = "hard-mandatory"
 }
 
 policy "prohibited-providers-in-config" {
-    source = "./terraform/prohibited-providers-in-config.sentinel"
+    source = "./prohibited-providers-in-config.sentinel"
     enforcement_level = "advisory"
 }
 
 policy "workspace-limit-resources" {
-    source = "./terraform/workspace-limit-resources.sentinel"
+    source = "./workspace-limit-resources.sentinel"
     enforcement_level = "advisory"
 }
