@@ -1,25 +1,137 @@
 # This policy uses the Sentinel tfplan/v2 import to require that
 # all Azure VMs have vm sizes from an allowed list
 
-# Import common-functions/tfplan-functions/tfplan-functions.sentinel
-import "tfplan-functions" as plan
+import "tfplan/v2" as tfplan
+import "strings"
+import "types"
 
 # Parameters - Include "null" to allow missing or computed values
 param approved_instance_types default ["Standard_D2as_v5", "Standard_D4as_v5", "Standard_D8as_v5"]
 
+### Helper functions ###
+
+# Convert objects of unknown type to string
+to_string = func(obj) {
+    case types.type_of(obj) {
+        when "string":
+            return obj
+        when "int", "float", "bool":
+            return string(obj)
+        when "null":
+            return "null"
+        when "undefined":
+            return "undefined"
+        when "list":
+            output = "["
+            lastIndex = length(obj) - 1
+            for obj as index, value {
+                if index < lastIndex {
+                    output += to_string(value) + ", "
+                } else {
+                    output += to_string(value)
+                }
+            }
+            output += "]"
+            return output
+        when "map":
+            output = "{"
+            theKeys = keys(obj)
+            lastIndex = length(theKeys) - 1
+            for theKeys as index, key {
+                if index < lastIndex {
+                    output += to_string(key) + ": " + to_string(obj[key]) + ", "
+                } else {
+                    output += to_string(key) + ": " + to_string(obj[key])
+                }
+            }
+            output += "}"
+            return output
+        else:
+            return ""
+    }
+}
+
+# Evaluate the value of a resource's or block's attribute even if nested
+evaluate_attribute = func(r, attribute) {
+    attributes = strings.split(attribute, ".")
+    
+    if attributes[0] matches "^[0-9]+$" {
+        a = int(attributes[0])
+        if types.type_of(r) is not "list" {
+            return undefined
+        }
+    } else {
+        a = attributes[0]
+    }
+
+    if (types.type_of(r) is "map" and "change" in keys(r)) and
+       (types.type_of(r.change) is "map" and "after" in keys(r.change)) {
+        new_r = r.change.after[a] else null
+    } else {
+        new_r = r[a] else null
+    }
+
+    if length(attributes) > 1 {
+        attributes = attributes[1:length(attributes)]
+        attribute = strings.join(attributes, ".")
+        return evaluate_attribute(new_r, attribute)
+    } else {
+        return new_r
+    }
+}
+
+# Find all resources of a specific type
+find_resources = func(type) {
+    resources = filter tfplan.resource_changes as address, rc {
+        rc.type is type and
+        rc.mode is "managed" and
+        (rc.change.actions contains "create" or rc.change.actions contains "update" or
+         rc.change.actions contains "read" or (rc.change.actions contains "no-op" and
+         rc.change.after is not null))
+    }
+    return resources
+}
+
+# Filter resources to those with an attribute that is not in an allowed list
+filter_attribute_not_in_list = func(resources, attr, allowed, prtmsg) {
+    violators = {}
+    messages = {}
+    
+    for resources as address, rc {
+        v = evaluate_attribute(rc, attr) else null
+        if v is null {
+            v = "null"
+        }
+        
+        if v not in allowed {
+            message = to_string(address) + " has " + to_string(attr) + " with value " +
+                     to_string(v) + " that is not in the allowed list: " +
+                     to_string(allowed)
+            violators[address] = rc
+            messages[address] = message
+            if prtmsg {
+                print(message)
+            }
+        }
+    }
+    return {"resources":violators,"messages":messages}
+}
+
+### Policy Implementation ###
+
 # Get all Azure VMs by type
-allAzureVMs = plan.find_resources("azurerm_virtual_machine")
-allAzureWindowsVMs = plan.find_resources("azurerm_windows_virtual_machine")
-allAzureLinuxVMs = plan.find_resources("azurerm_linux_virtual_machine")
+allAzureVMs = find_resources("azurerm_virtual_machine")
+allAzureWindowsVMs = find_resources("azurerm_windows_virtual_machine")
+allAzureLinuxVMs = find_resources("azurerm_linux_virtual_machine")
 
 # Filter violations for each VM type
-violatingAzureVMs = plan.filter_attribute_not_in_list(allAzureVMs,
+violatingAzureVMs = filter_attribute_not_in_list(allAzureVMs,
                     "vm_size", approved_instance_types, true)
 
-violatingAzureWindowsVMs = plan.filter_attribute_not_in_list(allAzureWindowsVMs,
+violatingAzureWindowsVMs = filter_attribute_not_in_list(allAzureWindowsVMs,
                     "size", approved_instance_types, true)
 
-violatingAzureLinuxVMs = plan.filter_attribute_not_in_list(allAzureLinuxVMs,
+violatingAzureLinuxVMs = filter_attribute_not_in_list(allAzureLinuxVMs,
                     "size", approved_instance_types, true)
 
 # Count total violations
