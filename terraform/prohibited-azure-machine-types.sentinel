@@ -8,7 +8,7 @@ import "tfplan-functions" as plan
 param approved_instance_types default [
     "Standard_D2as_v5",
     "Standard_D4as_v5",
-    "Standard_D8as_v5"
+    "Standard_D8as_v5",
 ]
 
 # Get all Azure VMs by type
