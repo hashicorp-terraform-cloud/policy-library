@@ -5,11 +5,7 @@
 import "tfplan-functions" as plan
 
 # Parameters - Include "null" to allow missing or computed values
-param approved_instance_types default [
-    "Standard_D2as_v5",
-    "Standard_D4as_v5",
-    "Standard_D8as_v5",
-]
+param approved_instance_types default ["Standard_D2as_v5", "Standard_D4as_v5", "Standard_D8as_v5"]
 
 # Get all Azure VMs by type
 allAzureVMs = plan.find_resources("azurerm_virtual_machine")
