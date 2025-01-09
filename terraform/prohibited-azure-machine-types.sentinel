@@ -1,0 +1,37 @@
+# This policy uses the Sentinel tfplan/v2 import to require that
+# all Azure VMs have vm sizes from an allowed list
+
+# Import common-functions/tfplan-functions/tfplan-functions.sentinel
+import "tfplan-functions" as plan
+
+# Parameters - Include "null" to allow missing or computed values
+param approved_instance_types default [
+    "Standard_D2as_v5",
+    "Standard_D4as_v5",
+    "Standard_D8as_v5"
+]
+
+# Get all Azure VMs by type
+allAzureVMs = plan.find_resources("azurerm_virtual_machine")
+allAzureWindowsVMs = plan.find_resources("azurerm_windows_virtual_machine")
+allAzureLinuxVMs = plan.find_resources("azurerm_linux_virtual_machine")
+
+# Filter violations for each VM type
+violatingAzureVMs = plan.filter_attribute_not_in_list(allAzureVMs,
+                    "vm_size", approved_instance_types, true)
+
+violatingAzureWindowsVMs = plan.filter_attribute_not_in_list(allAzureWindowsVMs,
+                    "size", approved_instance_types, true)
+
+violatingAzureLinuxVMs = plan.filter_attribute_not_in_list(allAzureLinuxVMs,
+                    "size", approved_instance_types, true)
+
+# Count total violations
+violations = length(violatingAzureVMs["messages"]) +
+             length(violatingAzureWindowsVMs["messages"]) +
+             length(violatingAzureLinuxVMs["messages"])
+
+# Main rule that must be true
+main = rule {
+    violations is 0
+}
